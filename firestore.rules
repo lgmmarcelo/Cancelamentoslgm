@@ -1,0 +1,215 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: userId (auth.uid)
+// Fields:
+//   - name: string (optional) - User's full name
+//   - email: string (required) - User's email
+//   - profileId: string (optional) - Reference to profiles collection
+//   - role: string (optional, enum: ['admin', 'user']) - User's role
+//   - empreendimentos: array (optional) - List of empreendimentos the user can access
+//   - createdAt: string (required) - ISO 8601 date string
+//   - updatedAt: string (required) - ISO 8601 date string
+//
+// Collection: profiles
+// Document ID: profileId
+// Fields:
+//   - name: string (required) - Profile name
+//   - permissions: map (required) - Map of boolean permissions
+//   - isSystem: boolean (required) - True if it's a built-in profile
+//   - createdAt: string (required) - ISO 8601 date string
+//   - updatedAt: string (required) - ISO 8601 date string
+//
+// Collection: cancelamentos
+// Document ID: cancelamentoId
+// Fields:
+//   - nomeCompleto: string (required)
+//   - cpf: string (required)
+//   - timestamp: string (required) - ISO 8601 date string
+//   - createdAt: string (required) - ISO 8601 date string
+//   - updatedAt: string (required) - ISO 8601 date string
+//   - ... other optional fields
+//
+// Collection: emailRecipients
+// Document ID: recipientId
+// Fields:
+//   - email: string (required)
+//   - name: string (optional)
+//   - active: boolean (required)
+//   - createdAt: string (required) - ISO 8601 date string
+//
+// Collection: emailLogs
+// Document ID: logId
+// Fields:
+//   - recipientEmail: string (required)
+//   - subject: string (required)
+//   - status: string (required)
+//   - createdAt: string (required) - ISO 8601 date string
+//
+// Collection: system
+// Document ID: 'meta'
+// Fields:
+//   - lastSync: string (optional) - ISO 8601 date string
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email_verified == true && (
+          request.auth.token.email.lower() == "marcelo@laghettomultipropriedade.com.br" ||
+          request.auth.token.email.lower() == "laghettogolden@gmail.com"
+        )) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+    
+    function isSystemUser() {
+      return isAuthenticated() && (
+        isAdmin() || exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp;
+    }
+    
+    function isValidUser(data) {
+      return hasRequiredFields(['email', 'createdAt', 'updatedAt']) &&
+             data.email is string &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt) &&
+             (!('role' in data) || data.role in ['admin', 'user']) &&
+             (!('profileId' in data) || data.profileId is string) &&
+             (!('empreendimentos' in data) || data.empreendimentos is list);
+    }
+    
+    function isValidProfile(data) {
+      return hasRequiredFields(['name', 'permissions', 'isSystem', 'createdAt', 'updatedAt']) &&
+             data.name is string &&
+             data.permissions is map &&
+             data.isSystem is bool &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+    
+    function isValidCancelamento(data) {
+      return hasRequiredFields(['nomeCompleto', 'cpf', 'timestamp', 'createdAt', 'updatedAt']) &&
+             data.nomeCompleto is string &&
+             data.cpf is string &&
+             isValidDateString(data.timestamp) &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt);
+    }
+    
+    function isValidEmailRecipient(data) {
+      return hasRequiredFields(['email', 'active', 'createdAt']) &&
+             data.email is string &&
+             data.active is bool &&
+             (isValidDateString(data.createdAt) || isValidTimestamp(data.createdAt));
+    }
+    
+    function isValidEmailLog(data) {
+      return hasRequiredFields(['recipientEmail', 'subject', 'status', 'createdAt']) &&
+             data.recipientEmail is string &&
+             data.subject is string &&
+             data.status is string &&
+             isValidDateString(data.createdAt);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can read their own data, Admins can read all
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Only Admins can create users
+      allow create: if isAdmin() && isValidUser(request.resource.data);
+      
+      // Users can update their own data (but not their role), Admins can update anything
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isAdmin() || 
+        (isOwner(userId) && request.resource.data.role == resource.data.role)
+      );
+      
+      // Only Admins can delete users
+      allow delete: if isAdmin();
+    }
+
+    match /profiles/{profileId} {
+      // Any system user can read profiles (needed for UI rendering)
+      allow read: if isSystemUser();
+      
+      // Only Admins can modify profiles
+      allow create: if isAdmin() && isValidProfile(request.resource.data);
+      allow update: if isAdmin() && isValidProfile(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /cancelamentos/{docId} {
+      // Any system user can read cancelamentos
+      allow read: if isSystemUser();
+      
+      // Only Admins (or backend sync processes) can modify cancelamentos
+      allow create: if isAdmin() && isValidCancelamento(request.resource.data);
+      allow update: if isAdmin() && isValidCancelamento(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /emailRecipients/{docId} {
+      // Only Admins can manage email recipients
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidEmailRecipient(request.resource.data);
+      allow update: if isAdmin() && isValidEmailRecipient(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /emailLogs/{docId} {
+      // Only Admins can view or write email logs
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidEmailLog(request.resource.data);
+      allow update: if isAdmin() && isValidEmailLog(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /system/{docId} {
+      // Only Admins can manage system metadata
+      allow read, write: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      // Only Admins can manage settings
+      allow read, write: if isAdmin();
+    }
+  }
+}

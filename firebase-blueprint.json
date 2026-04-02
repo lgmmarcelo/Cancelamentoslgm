@@ -1,0 +1,134 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Usuários do sistema",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "profileId": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "empreendimentos": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "createdAt", "updatedAt"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Perfis de acesso",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "viewDashboard": { "type": "boolean" },
+            "viewRelatorios": { "type": "boolean" },
+            "manageUsers": { "type": "boolean" },
+            "manageProfiles": { "type": "boolean" },
+            "manageRecipients": { "type": "boolean" },
+            "viewLogs": { "type": "boolean" },
+            "sendEmails": { "type": "boolean" },
+            "syncSheet": { "type": "boolean" },
+            "exportCsv": { "type": "boolean" },
+            "filterByEmpreendimento": { "type": "boolean" }
+          }
+        },
+        "isSystem": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "permissions", "isSystem", "createdAt", "updatedAt"]
+    },
+    "Cancelamento": {
+      "title": "Cancelamento",
+      "description": "Registro de distrato",
+      "type": "object",
+      "properties": {
+        "nomeCompleto": { "type": "string" },
+        "cpf": { "type": "string" },
+        "telefone": { "type": "string" },
+        "dataCompra": { "type": "string", "format": "date-time" },
+        "salaVendas": { "type": "string" },
+        "nomeVendedor": { "type": "string" },
+        "nomeGerente": { "type": "string" },
+        "empreendimentos": { "type": "array", "items": { "type": "string" } },
+        "qtdCotas": { "type": "number" },
+        "motivoPrincipal": { "type": "string" },
+        "motivosSecundarios": { "type": "array", "items": { "type": "string" } },
+        "satisfacaoComercial": { "type": "number" },
+        "possibilidadeRecompra": { "type": "string" },
+        "auditorLeuClausulas": { "type": "boolean" },
+        "experienciaComercial": { "type": "string" },
+        "sugestoesMelhorias": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "diasAteDistrato": { "type": "number" },
+        "classificacaoDistrato": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nomeCompleto", "cpf", "timestamp", "createdAt", "updatedAt"]
+    },
+    "EmailRecipient": {
+      "title": "EmailRecipient",
+      "description": "Destinatários de email",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "active", "createdAt"]
+    },
+    "EmailLog": {
+      "title": "EmailLog",
+      "description": "Logs de email",
+      "type": "object",
+      "properties": {
+        "recipientEmail": { "type": "string" },
+        "subject": { "type": "string" },
+        "status": { "type": "string" },
+        "errorMessage": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recipientEmail", "subject", "status", "createdAt"]
+    },
+    "SystemMeta": {
+      "title": "SystemMeta",
+      "description": "Metadados do sistema",
+      "type": "object",
+      "properties": {
+        "lastSync": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Usuários do sistema"
+    },
+    "profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "Perfis de acesso"
+    },
+    "cancelamentos/{cancelamentoId}": {
+      "schema": { "$ref": "#/entities/Cancelamento" },
+      "description": "Registros de distratos"
+    },
+    "emailRecipients/{recipientId}": {
+      "schema": { "$ref": "#/entities/EmailRecipient" },
+      "description": "Destinatários de email"
+    },
+    "emailLogs/{logId}": {
+      "schema": { "$ref": "#/entities/EmailLog" },
+      "description": "Logs de envio de email"
+    },
+    "system/meta": {
+      "schema": { "$ref": "#/entities/SystemMeta" },
+      "description": "Metadados do sistema (ex: última sincronização)"
+    }
+  }
+}
